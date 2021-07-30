@@ -1,0 +1,472 @@
+---
+title: 'Final Paper: A Study of The Opioid Epidemic in the United States'
+author: "STOR 320.001 Group 11"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+library(tidyverse)
+require(knitr)
+#Put Necessary Libraries Here
+```
+
+```{r, include=FALSE}
+opioid_data_long = read_csv(file="C:/Users/mattb523/Documents/SCHOOL WORK/STOR320/FINAL PROJECT/Master_Table_Long.csv")
+opioid_data_wide = read_csv(file="C:/Users/mattb523/Documents/SCHOOL WORK/STOR320/FINAL PROJECT/Wide_Master.csv")
+
+opioid_data_wide1 <- opioid_data_wide %>%
+  filter(Year == '2016') %>%
+  filter(!is.na(Total))
+
+opioid_data_wide1 <- opioid_data_wide1 %>%
+  mutate(HS_Or_Less = (HS_Grad + Less_Than_HS)/(HS_Grad + Less_Than_HS + Bachelor_Degree + 
+                      Grad_Degree + Associates_Degree)) %>%
+  mutate(HS_Or_Less_Quantile = ntile(HS_Or_Less, 4)) %>%
+  mutate(Some_College = (Bachelor_Degree + Grad_Degree + Associates_Degree)/(HS_Grad +
+                        Less_Than_HS + Bachelor_Degree + Grad_Degree + Associates_Degree)) %>%
+  mutate(Some_College_Quantile = ntile(Some_College, 4)) %>%
+  mutate(Proportion_Non_US = Non_US_Born/Population) %>% 
+  mutate(Non_US_Quantile = ntile(Proportion_Non_US, 5)) %>%
+  mutate(PopDensity = Population/LandArea, Deaths_Per_100000 = (Total/Population) * 100000) %>%
+  mutate(GDP_Per_Capita = `GDP Total`/Population) %>%
+  mutate(GDP_EHSA_Per_Capita = as.numeric(`GDP Education, Health, Social Assistance`)/Population) %>%
+  mutate(GDP_PerCap_Quantile = ntile(GDP_Per_Capita, 4)) %>%
+  mutate(GDP_EHSA_PerCap_Quantile = ntile(GDP_EHSA_Per_Capita, 4)) %>%
+  mutate(Social_Transportation = Bike + Walk + Carpool + Public) %>%
+  mutate(AntiSocial_Transportation = Alone + Home)
+
+opioid_data_wide2 <- opioid_data_wide1 %>%
+  select(c("County","Deaths_Per_100000", "GDP_EHSA_Per_Capita", "GDP_EHSA_PerCap_Quantile"))
+
+opioid_data_wide2a = opioid_data_wide1 %>%
+  filter(!is.na(Unemployment)) %>%
+  filter(!is.na(Social_Transportation)) %>%
+  filter(!is.na(HS_Or_Less)) %>%
+  filter(!is.na(Income)) %>%
+  filter(!is.na(Proportion_Non_US)) %>%
+  filter(!is.na(GDP_Per_Capita)) %>%
+  filter(!is.na(GDP_EHSA_Per_Capita)) %>%
+  filter(!is.na(Population)) %>%
+  filter(!is.na(PopDensity))
+
+                                              
+Average_Deaths_Per_Quantile <- opioid_data_wide2 %>%
+  group_by(GDP_EHSA_PerCap_Quantile) %>%
+  filter(!is.na(GDP_EHSA_PerCap_Quantile)) %>%
+  summarise(Average_Deaths=mean(Deaths_Per_100000), "25%"=quantile(Deaths_Per_100000, 0.25), 
+  "40%"=quantile(Deaths_Per_100000, 0.4), "60%"=quantile(Deaths_Per_100000, 0.6),
+  "75%"=quantile(Deaths_Per_100000, 0.75), Inter_Quartile_Range=IQR(Deaths_Per_100000))
+
+opioid_data_wide3 <- opioid_data_wide1 %>%
+  select(c("County", "Population", "Heroin","Methadone", "Other", "GDP_PerCap_Quantile")) 
+opioid_data_wide3[is.na(opioid_data_wide3)]=0
+opioid_data_wide3 <- opioid_data_wide3 %>%
+  filter(GDP_PerCap_Quantile != 0) %>%
+  mutate(Heroin_Per_100k=(Heroin/Population)*100000) %>%
+  mutate(Methadone_Per_100k=(Methadone/Population)*100000) %>%
+  mutate(Other_Per_100k=(Other/Population)*100000)
+
+drug_averages <- opioid_data_wide3 %>%
+  group_by(GDP_PerCap_Quantile) %>%
+  summarise(Heroin_Per100k_Average=mean(Heroin_Per_100k),
+            "Heroin_Per100k_25%"=quantile(Heroin_Per_100k,.25),
+            "Heroin_Per100k_75%"=quantile(Heroin_Per_100k,.75),
+            Methadone_Per100k_Average=mean(Methadone_Per_100k),
+            "Methadone_Per100k_25%"=quantile(Methadone_Per_100k,.25),
+            "Methadone_Per100k_75%"=quantile(Methadone_Per_100k,.75),
+            Other_Per100k_Average=mean(Other_Per_100k),
+            "Other_Per100k_25%"=quantile(Other_Per_100k,.25),
+            "Other_Per100k_75%"=quantile(Other_Per_100k,.75))
+
+county_voter_data = read_csv(file="C:/Users/mattb523/Documents/SCHOOL WORK/STOR320/FINAL PROJECT/countypres_2000-2016.csv")
+
+county_voter_data <- county_voter_data %>%
+  filter(year=="2016", office=="President") %>%
+  select(year, state, county, party, candidatevotes, totalvotes) %>%
+  filter(party!="NA") %>%
+  pivot_wider(names_from = party, values_from = candidatevotes)
+
+
+opioid_voter_data <- county_voter_data %>%
+  inner_join(opioid_data_wide1, by=c('county' = 'County')) %>%
+  select(State, County=county, Year, TotalDeaths=Total, Population, Republican = republican, 
+         Democrat = democrat, TotalVotes=totalvotes, DeathsPer100k=Deaths_Per_100000) %>%
+  mutate(Percent_Rep = Republican/TotalVotes,
+         Percent_Dem = Democrat/TotalVotes) %>%
+  mutate(Winner = ifelse(Democrat > Republican,"Democrat","Republican"), 
+         Population_100k = Population/100000)
+
+# Scatter plot of data (population of county x total deaths of county)
+
+opioid_data_wide3 <- opioid_data_wide1 %>%
+  select(c("County", "Population", "Heroin","Methadone", "Other", "GDP_PerCap_Quantile")) 
+opioid_data_wide3[is.na(opioid_data_wide3)]=0
+opioid_data_wide3 <- opioid_data_wide3 %>%
+  filter(GDP_PerCap_Quantile != 0) %>%
+  mutate(Heroin_Per_100k=(Heroin/Population)*100000) %>%
+  mutate(Methadone_Per_100k=(Methadone/Population)*100000) %>%
+  mutate(Other_Per_100k=(Other/Population)*100000)
+
+opioid_data_wide_poli_gdp <- opioid_data_wide3 %>%
+  inner_join(opioid_voter_data, by="County") %>%
+  select(County, Population.x, Heroin, Methadone, Other, GDP_PerCap_Quantile, Heroin_Per_100k, 
+         Methadone_Per_100k, Other_Per_100k, State, Year, TotalDeaths, Winner)
+
+drug_averages <- opioid_data_wide_poli_gdp %>%
+  group_by(GDP_PerCap_Quantile) %>%
+  summarise(Heroin_Per100k_Average=mean(Heroin_Per_100k),
+            "Heroin_Per100k_25%"=quantile(Heroin_Per_100k,.25),
+            "Heroin_Per100k_75%"=quantile(Heroin_Per_100k,.75),
+            Methadone_Per100k_Average=mean(Methadone_Per_100k),
+            "Methadone_Per100k_25%"=quantile(Methadone_Per_100k,.25),
+            "Methadone_Per100k_75%"=quantile(Methadone_Per_100k,.75),
+            Other_Per100k_Average=mean(Other_Per_100k),
+            "Other_Per100k_25%"=quantile(Other_Per_100k,.25),
+            "Other_Per100k_75%"=quantile(Other_Per_100k,.75))
+
+poli_averages <-opioid_data_wide_poli_gdp %>%
+  group_by(Winner) %>%
+  summarise(Heroin_Per100k_Average=mean(Heroin_Per_100k),
+            "Heroin_Per100k_25%"=quantile(Heroin_Per_100k,.25),
+            "Heroin_Per100k_75%"=quantile(Heroin_Per_100k,.75),
+            Methadone_Per100k_Average=mean(Methadone_Per_100k),
+            "Methadone_Per100k_25%"=quantile(Methadone_Per_100k,.25),
+            "Methadone_Per100k_75%"=quantile(Methadone_Per_100k,.75),
+            Other_Per100k_Average=mean(Other_Per_100k),
+            "Other_Per100k_25%"=quantile(Other_Per_100k,.25),
+            "Other_Per100k_75%"=quantile(Other_Per_100k,.75))
+
+
+opioid_voter_data2 <- opioid_voter_data %>%
+  inner_join(opioid_data_wide3, by="County")
+
+opioid_data_wide_poli_gdp_new = opioid_data_wide_poli_gdp %>% 
+  mutate(WinnerNum = ifelse(Winner=="Democrat", 0, 1)) %>%
+  mutate(Winner_GDP = WinnerNum+GDP_PerCap_Quantile)
+
+
+opioid_data_wide3 <- opioid_data_wide1 %>%
+
+  select(c("County", "Deaths_Per_100000","Population", "Heroin","Methadone", "Other", "GDP_PerCap_Quantile"))
+
+opioid_data_wide3[is.na(opioid_data_wide3)]=0
+
+opioid_data_wide3 <- opioid_data_wide3 %>%
+
+  filter(GDP_PerCap_Quantile != 0) %>%
+
+  mutate(Heroin_Per_100k=(Heroin/Population)*100000) %>%
+
+  mutate(Methadone_Per_100k=(Methadone/Population)*100000) %>%
+
+  mutate(Other_Per_100k=(Other/Population)*100000)
+
+opioid_data_wide3 <- opioid_data_wide1 %>%
+
+  select(c("County", "Population", "Heroin","Methadone", "Other", "GDP_PerCap_Quantile", "Deaths_Per_100000"))
+
+opioid_data_wide3[is.na(opioid_data_wide3)]=0
+
+opioid_data_wide3 <- opioid_data_wide3 %>%
+
+  filter(GDP_PerCap_Quantile != 0) %>%
+
+  mutate(Heroin_Per_100k=(Heroin/Population)*100000) %>%
+
+  mutate(Methadone_Per_100k=(Methadone/Population)*100000) %>%
+
+  mutate(Other_Per_100k=(Other/Population)*100000)
+
+ 
+
+opioid_data_wide_poli_gdp <- opioid_data_wide3 %>%
+
+  inner_join(opioid_voter_data, by="County") %>%
+
+  select(County, Population.x, Heroin, Methadone, Other, GDP_PerCap_Quantile, Heroin_Per_100k, Methadone_Per_100k, Other_Per_100k, State, Year, TotalDeaths, Winner, Deaths_Per_100000)
+```
+
+
+
+# Introduction
+
+  The United States is currently in the midst of an unprecedented opioid epidemic. Opioids are a type of narcotic pain medication commonly prescribed to treat severe or persistent pain; however, these drugs are highly addictive and can lead to overdose and death if improperly prescribed or used. As recently as 2019, 10.1 million people misused prescription opioids, 1.6 million people developed an opioid disorder, and 70,630 people died from an opioid-induced drug overdose. While these numbers may be shocking, it is essential to acknowledge that the U.S opioid epidemic is over 30 years in the making and has impacted tens, if not hundreds, of millions of lives in the process. Wave 1, which started in the early ’90s, was associated with a rise in prescription opioid overdose deaths. This rise in prescription opioid deaths was followed by Wave 2, which was associated with a rise in heroin overdose deaths. Wave 3, the most recent wave which began in 2013 and the current wave, is associated with a rise in synthetic opioid overdose deaths, particularly fentanyl.
+
+  To investigate the impact of the opioid epidemic on the lives of US residents, our group decided to use a Kaggle dataset titled “Opioid Epidemic Analysis by US County.” This dataset allowed us to explore the relationship between the different geographical, socioeconomic, and demographic variables associated with a county and the county’s total opioid and opioid-specific death counts. After cleaning the data, we developed two key questions. The first question - what is the best model with the given variables to predict opioid deaths in a county? - is essential to ask because it 1) allows us to determine which variables are actually significant in predicting opioid deaths and 2) provides insights for policymakers as to which policies or interventions are most effective in reducing deaths per dollar spent to reduce opioid deaths. Our second question - how do a county’s political affiliation and GDP per capita affect opioid deaths per capita in that county? - was a necessary question to ask because 1) we wanted to understand whether public stereotypes of the political affiliation of communities with high or low opioid deaths rates were true or not and 2) whether the political affiliation of a county significantly impacted their implementations of social and economic policies relevant to increasing or decreasing opioid death rates.
+
+  Overall, our group finds it critical to explore the impact of the U.S. opioid epidemic on the lives of U.S residents, develop a model to predict opioid deaths, and illuminate the truth of stereotypes regarding communities that are deeply impacted by this deadly epidemic. Our analyses will help policymakers predict better where opioid deaths are most common and formulate interventions targeted at these communities to reduce opioid deaths. Reducing opioid deaths also has financial implications. According to the CDC, “the total economic burden of prescription opioid misuse alone in the United States is $78.5 billion, including the costs of healthcare, lost productivity, addiction treatment, and criminal justice involvement.” By reducing opioid deaths, we not only save lives - but save billions of dollars yearly that can then be redistributed to other government programs assisting American residents.
+
+# Data
+
+To study the impact of the opioid epidemic, we used a dataset titled “Opioid Epidemic Analysis by US County.” This dataset compiled county-level data from 2011 to 2017 on opioid deaths, pulling information from the Center for Disease Control and Prevention (CDC), the Bureau of Labor Statistics (BLS), and the Census. Variables included in this data set included: U.S. county names, the state name, the total number of opioid deaths, the type of opioid responsible for the death, the population of the county, the geographic size of the county, the proportion of non-U.S. born in the county, the average income in the county, unemployment rate, total Gross Domestic Product (GDP), total Gross Domestic Product for Education, Health, and Social Assistance (EHSA GDP), the percentage of the type of transportation used in the county, and variables on the level of education of the population in the county. In total, we had a sample of 583 observations, or 583 counties of interest.
+
+To answer our first question, we first converted variables from our data set to be usable for our study. The first conversion consisted of transforming our variable of total death by opioids to total death by opioids per capita. We labeled this new variable deaths per capita. We did this by using the variable for county population and the variable for total death by opioids in a county. We had also converted the variables for Total GDP and EHSA GDP to be represented as GDP per capita and EHSA GDP per capita. The dataset had included data for several years. However, we filtered the dataset only to include data from 2016. We had also created a variable for population density by dividing the population values for each county by the land area values from the original dataset. Variables regarding transportation were also created. We created Social Transportation and Anti-Social Transportation variables that represented the proportion of the types of transportation used in a county. The variable Social Transportation consisted of the proportion of the county that used a bike, walked to work, carpool, or public transportation as a means to commute to work. Anti-Social Transportation included the proportion of individuals that commuted alone to work or worked at home. Lastly, we had also created variables that represented the proportion of the levels of education in a county.
+
+The table below represents some of the variables that we looked at for our study. This table lists the ten counties in our dataset with the highest deaths per capita from opioids.
+
+```{r, echo=FALSE}
+library(knitr)
+library(formattable)
+variables_used <- opioid_data_wide1 %>%
+  arrange(desc(Deaths_Per_100000))%>%
+  mutate(`Deaths Per Capita`= Deaths_Per_100000)%>%
+  mutate(`Pop. Density` = PopDensity)%>%
+  select(County,State,Income,`Pop. Density`,`Deaths Per Capita`)
+
+Variable_Table = head(variables_used,n=10)
+
+kable(Variable_Table, caption = "Example of Data Used", align = "l")
+```
+To further visualize our data, a map was generated that showed the total deaths for counties within our dataset. As observed, many counties across the United States do not have data regarding opioid-related deaths. 
+
+![](C:/Users/mattb523/Documents/SCHOOL WORK/STOR320/FINAL PROJECT/map.png)
+
+For our second question, we wanted to observe how political affiliation affected the total deaths per capita in a county. To do this, we used the R inner join function to merge our initial dataset with an election-specific dataset titled “County Presidential Election Returns 2000-2016” from the MIT Election Data and Science Lab. By combining the two datasets, we could tie the political affiliation for every county in the US with the number of opioid deaths and the geographic, socioeconomic, and demographic information we had for those same counties in our initial dataset. A county would be considered either a Democratic or Republican county based on the overall votes for each party in a county.
+
+# Results
+
+## Question 1: What Model Will Best Predict Opioid Deaths Per Capita?
+
+Our first question asks, “What model will best predict opioid deaths per capita, given the variables in the data set?” Finding an accurate way to predict which counties will have more opioid deaths is essential when deciding how to deal with this epidemic. Specifically, a regression model will tell us which factors are the most predictive of opioid deaths per capita and show which counties are at the highest risk. In setting out to determine the best linear model for predicting opioid deaths per capita, we first checked the distribution of the data. To do this, we created a density plot and a Q-Q plot of the dependent variable, deaths per 100,000, which produced a distribution and Q-Q plot that indicated a strong right skew (Figure 2, Figure 3). We then log-transformed the variable in an attempt to normalize the data. The result was a relatively normal distribution (Figure 4, Figure 5).
+
+```{r, echo = F, fig.show="hold", out.width="50%"}
+# fig 1
+opioid_data_wide2a %>% 
+  ggplot(aes(x = Deaths_Per_100000)) +
+  geom_density() +
+  labs(title = "Figure 2: Density plot of deaths per 100,000") +
+  xlab("Deaths per 100,000")
+
+# fig 2
+qqnorm(opioid_data_wide2a$Deaths_Per_100000, main = "Figure 3: Normal Q-Q Plot of Deaths")
+```
+
+```{r, echo = F, fig.show="hold", out.width="50%"}
+
+# fig 3
+opioid_data_wide2a %>% 
+  ggplot(aes(x = log(Deaths_Per_100000))) +
+  geom_density() +
+  labs(title = "Figure 4: Density plot of log transformed deaths per 100,000") +
+  xlab("Log transformed deaths per 100,000")
+
+#fig 4
+qqnorm(log(opioid_data_wide2a$Deaths_Per_100000), main = "Figure 5: Normal Q-Q Plot of Log Transformed Deaths")
+```
+
+The next step was to determine the best independent variables to use in the model. We chose  unemployment, social (or public) transportation, the proportion of the population with a high school education or less, the proportion of citizens born outside of the U.S, total population, population density, income, GDP per capita, and EHSA GDP per capita for the full model. To determine which variables were significant and which were the most influential, we used R to perform backward selection on the variables. Backward selection works by eliminating the variable with the highest p-value, checking the new adjusted R squared to determine whether it was higher upon elimination, and repeating this process if the observed adjusted R squared was higher until elimination no longer improved the model. Once elimination no longer improves the model and the adjusted R squared is seen to decrease, the last eliminated variable is added back, and this result is used as the final model.
+
+For our full model of the log-transformed data inclusive of the independent variables discussed earlier, we initially observed an adjusted R squared of .26578. Population density had the highest p-value at .956, so it was removed first, improving the adjusted r squared of this model to .2675 in the first partial model. A higher adjusted R squared means that the independent variables can explain more of the dependent variable, so a higher R squared in the first iteration of the model means that this new model has more predictive power than our original full model. The second variable to be removed was population, with a p-value of .9151, which led to this second partial model having an adjusted R squared of .2692. The third variable to be removed was unemployment. Unemployment had a p-value of .3154, and the adjusted R squared in the third partial model upon it being removed was .2691. While this is slightly lower than the previous p-value, we decided not to put unemployment back because of its high p-value. Thus we chose the third partial model as our final model.
+
+```{r, echo = F}
+
+# code that finds the best model
+Full_log=lm(log(Deaths_Per_100000)~Unemployment+Social_Transportation+HS_Or_Less+Income+Proportion_Non_US + GDP_Per_Capita + GDP_EHSA_Per_Capita + Population + PopDensity, data = opioid_data_wide2a)
+full = Full_log %>% summary()
+
+  partial1 =lm(log(Deaths_Per_100000)~Unemployment+Social_Transportation+HS_Or_Less+Income+Proportion_Non_US + GDP_Per_Capita + GDP_EHSA_Per_Capita + Population, data = opioid_data_wide2a)
+
+p1 = summary(partial1)
+
+partial2 =lm(log(Deaths_Per_100000)~Unemployment+Social_Transportation+HS_Or_Less+Income+Proportion_Non_US + GDP_Per_Capita + GDP_EHSA_Per_Capita, data = opioid_data_wide2a)
+
+p2 = summary(partial2)
+
+partial3 =lm(log(Deaths_Per_100000)~Social_Transportation+HS_Or_Less+Income+Proportion_Non_US + GDP_Per_Capita + GDP_EHSA_Per_Capita, data = opioid_data_wide2a)
+
+ p3 = summary(partial3)
+
+partial4 =lm(log(Deaths_Per_100000)~Social_Transportation+HS_Or_Less+Income+Proportion_Non_US  + GDP_EHSA_Per_Capita, data = opioid_data_wide2a)
+
+p4 = summary(partial4)
+
+# this figure will show the selection process
+results = tibble(
+  Model = c("full", "Partial model 1","Partial model 2","Partial model 3"),
+  `Adjusted R Squared` = c(full$adj.r.squared,p1$adj.r.squared,p2$adj.r.squared,p3$adj.r.squared),
+  `Variable with Highest P Value` = c("PopDensity", "Population","Unemployment","GDP"),
+  `Highest P Value in the Model` = c(.956, .9151, .3154, .01349)
+)
+
+# fig 5
+kable(results, caption = "Backwords Elimination Process", label = NULL)
+```
+
+While the final model was the best based on the summary of our backward elimination, we found it still had flaws. The final model had an adjusted R squared of .2691, which means that the independent variables can explain only roughly 27% of deaths per capita. While this is acceptable for the parameters of this project, these results are not great, and future research should work towards improving this model with the addition of additional demographic and socioeconomic variables. While it is essential to acknowledge that there is no objective standard for what a good R squared is, we note that this is on the low end of usable. The residuals for this model looked good, especially compared to the residuals of the non-transformed model. A scatter plot (fig 6) of fitted values versus residuals appeared random and centered around zero. The standard deviation for the residuals was .493, and the interquartile range was -.335 to .360. In evaluating this model, it is crucial to take limitations into account. In order to run these models, a large number of observations were eliminated due to missing data for certain variables, resulting in a data set that was much smaller than the original. The 2016 portion of the original data set had 583 observations, and the cleaned version had 438. The difference between the cleaned and uncleaned versions was too high to try and impute the missing data. This leaves room for future analysis and data collection. A more complete data set may produce different results and a more predictive model.
+
+```{r, echo=FALSE}
+log_mod = lm(formula = log(Deaths_Per_100000) ~ Social_Transportation + 
+    HS_Or_Less + Income + Proportion_Non_US + GDP_Per_Capita + 
+    GDP_EHSA_Per_Capita, data = opioid_data_wide2a)
+
+# fig 6
+log_mod %>% 
+  ggplot() +
+  geom_point(aes(x = .fitted, y = .resid)) + labs(title="Figure 6") + theme(plot.title = element_text(hjust=0.5))
+```
+
+Because the dependent variable was log-transformed, the betas of our model must be interpreted a bit differently. Each increase of one unit of an independent variable corresponds to  $e^{\beta}y$ where y is the dependent variable. For example, the proportion of people in a county who were not born in the US has a beta of -5.67. Because the variable is a proportion, the beta should be interpreted as when 100 percent of a county is not born in the U.S., the number of deaths per 100,000 equals exp(-5.67) times the number of deaths calculated by the other variables. The rest of the betas are represented by the equation:
+
+## $log(Y) = .8872 + 2.023x_1 + 2.411x_2 + 8.969 * 10^{-6}x_3 - 5.171x_4 - 3.741 * 10^{-3}x_5 + 3.617 * 10^{-2}x_6$
+
+
+where
+
+
+$Y =$ The number of opioid deaths per 100,000 in a given county
+
+$x_1 =$ Proportion of county that uses social transportation
+
+$x_2 =$ Proportion highest educational attainment is high school or less
+
+$x_3 =$ Income
+
+$x_4 =$ Proportion of citizens in a county not born in the U.S.
+
+$x_5 =$ GDP per capita
+
+$x_6 =$ EHSA GDP per capita
+
+It is important to note that the maximum value for the proportion non-U.S. born is at 0.423. This means the model is extrapolating what happens at 100 percent, which can be dangerous. We also see this happen for the high school or less variable, which has a maximum value of .644.
+
+Despite the limitations of the model, it has produced some results worth analyzing. The immense impact of improving higher education on reducing opioid deaths is an essential consideration for policymakers to consider when looking at potential interventions and conducting cost-benefit analyses for government initiatives. From our model, we see evidence for the benefits of encouraging young people to go to a four-year college or even community college in reducing opioid deaths. This model also had some surprising results. We expected population and population density to be much more significant. However, their p-value was close to 1. This finding was interesting to our group because high proportions of people not born in the U.S. were mostly in large, dense cities. Another result that our group thought was interesting was the different betas observed for GDP per capita and EHSA GDP capita. While GDP per capita was negatively correlated with deaths per capita, EHSA GDP per capita was positively correlated with deaths per capita. One potential explanation for these inverse correlations is that areas with lower GDPs are already receiving interventions in education spending, healthcare spending, and social assistance. This would lead to EHSA GDP to make up a larger percentage of their overall GDP.  The interventions are an attempt to alleviate the problems that could cause more opioid deaths. This positive relationship between EHSA GDP and deaths per capita could result from counties experiencing higher deaths per capita needing additional interventions from EHSA GDP.
+
+## Question 2: Do The Political Affiliation and GDP Per Capita of a County Have a Relationship With That County's Opioid Deaths Per Capita?
+
+No matter their race, gender, political views, or any other identity, any American can become a part of this epidemic.  The first step to helping these people and beginning to heal America from opioids is identifying who might be at risk of becoming a victim of the epidemic before they become one.  One of the two questions we set out to answer in this analysis was:  How do a county’s political affiliation and GDP per capita affect opioid deaths per capita in that county?  The objective of our analysis was to determine if the GDP levels and political affiliations, based on the 2016 US Presidential Election, of a county, both independently and together, have any relationship with the opioid deaths within that county.  By shedding light on potential factors that put counties at risk for higher opioid death rates, we hope that our analysis gives governments the ability to put policies in place to prevent opioid deaths across America, and more specifically, to stem the flow of death in high-risk counties.
+
+We started by looking at summary statistics for heroin, methadone, other, and total opioid deaths per capita in 2016 for each county in the dataset, then created graphs that illustrated the relationships between a county’s opioid deaths per capita and GDP per capita. Finally, we ran correlation tests to see if the relationships seen in the graphs were statistically significant. We found that for both heroin (Figure 8) and methadone (Figure 9), death rates increased as GDP per capita rose. For heroin deaths per capita and GDP per capita, the correlation coefficient was 0.088, and the p-value for the correlation test was 0.042. Using a 95% significance level, we concluded that the positive correlation between heroin deaths per capita and GDP per capita is statistically significant, although it is a weak correlation. The correlation coefficient between methadone deaths per capita and GDP per capita was 0.180, and the p-value for the correlation test was 0.00002. Therefore, we concluded that the positive correlation was statistically significant.
+
+```{r, echo=FALSE, warning=FALSE}
+# heroin + methadone tables
+ggplot(opioid_data_wide_poli_gdp, aes(x=GDP_PerCap_Quantile, y=Heroin_Per_100k, color=Winner)) + geom_point() + geom_smooth(method="lm") +
+
+  scale_color_manual(values = c("Democrat" = "blue", "Republican" = "red")) + xlab("GDP Per Capita") +
+
+  ylab("Heroin Deaths Per 100,000") +
+
+  ggtitle("Figure 7: GDP Per Capita VS Heroin Deaths Per 100,000")
+
+ggplot(opioid_data_wide_poli_gdp, aes(x=GDP_PerCap_Quantile, y=Methadone_Per_100k, color=Winner)) + geom_point() + geom_smooth(method="lm") +
+
+  scale_color_manual(values = c("Democrat" = "blue", "Republican" = "red")) + xlab("GDP Per Capita") +
+
+  ylab("Methadone Deaths Per 100,000") +
+
+  ggtitle("Figure 8: GDP Per Capita VS Methadone Deaths Per 100,000")
+```
+On the other hand, other opioid death rates (Figure 10), defined as deaths from opioids not caused by heroin or methadone, decreased as GDP per capita increased. The correlation coefficient between other opioid deaths per capita and GDP per capita was -0.145, and the p-value for the correlation test was 0.00007. Based on these values, we concluded that there was a statistically significant negative correlation between other opioid death rates and GDP per capita. Similar to other opioid deaths, total opioid death rates (Figure 11) decreased as GDP per capita increased. The correlation coefficient for total opioid deaths per capita and GDP per capita was -0.269, and the p-value for this correlation test was 1.93 x 10^(-10). Seeing this, we concluded that there is a negative correlation between total opioid deaths per capita and GDP per capita and that that correlation is statistically significant.
+
+```{r, echo=FALSE, warning=FALSE}
+# other table
+ggplot(opioid_data_wide_poli_gdp, aes(x=GDP_PerCap_Quantile, y=Other_Per_100k, color=Winner)) + geom_point() + geom_smooth(method="lm") +
+
+  scale_color_manual(values = c("Democrat" = "blue", "Republican" = "red")) + xlab("GDP Per Capita") +
+
+  ylab("Other Deaths Per 100,000") +
+
+  ggtitle("Figure 9: GDP Per Capita VS Other Deaths Per 100,000")
+
+ggplot(opioid_data_wide_poli_gdp, aes(x=GDP_PerCap_Quantile, y=Deaths_Per_100000, color=Winner)) + geom_point() + geom_smooth(method="lm") +
+
+  scale_color_manual(values = c("Democrat" = "blue", "Republican" = "red")) + xlab("GDP Per Capita") +
+
+  ylab("Deaths Per 100,000") +
+
+  ggtitle("Figure 10: GDP Per Capita VS Deaths Per 100,000")
+```
+A boxplot of total opioid deaths at different GDP per capita levels can be seen below in Figure 12. For each of the three types of opioids, the correlation between death rates and GDP per capita was low but statistically significant. We also noted an observation of interest - that total opioid death rates had the strongest correlation with GDP per capita.
+
+```{r, echo=FALSE}
+ggplot(opioid_data_wide3, aes(x=GDP_PerCap_Quantile, y=Deaths_Per_100000)) + geom_boxplot(mapping=aes(group=cut_number(GDP_PerCap_Quantile, 4))) + xlab("Quartile of GDP Per Capita") +
+
+  ylab("Deaths Per 100,000") +
+
+  ggtitle("Figure 11: Quartile of GDP Per Capita VS Deaths Per 100,000")
+```
+Next, we looked at how counties voted in the 2016 presidential election and any potential relationship between political affiliation and opioid death rates. When looking at opioid death rates and political affiliations of counties, our tables displayed that death rates for both heroin and methadone were higher in counties that voted for the Democrat candidate than counties that voted for the Republican candidate in the 2016 presidential election. The average heroin deaths per 100,000 residents for Democratic counties was 5.96, while this number was 5.27 for Republican counties. Likewise, the average methadone deaths per 100,000 residents for Democrat counties was 0.22, while Republican counties averaged 0.13 deaths. However, both other and total opioid deaths observed higher death rates in Republican counties than in Democratic counties. The average number of deaths from other opioids per 100,000 residents was 6.51 in Democratic counties and 7.05 in Republican counties. A similar trend could be observed for total opioid death, as Democratic counties averaged 17.19 deaths per 100,000 residents and Republican counties averaged 18.22 per 100,000 residents. Interestingly, heroin and methadone death rates were higher for counties that voted Democrat and had higher GDP per capita levels. In comparison, death rates for other and total opioids were higher for Republican-voting counties with lower GDP per capita. We look forward to analyzing these variables together further, and seeing if the similar trends for high GDP per capita with Democratic counties and low GDP per capita with Republican counties had statistical significance.
+  
+To combine the analysis of GDP per capita and political affiliation, we plotted opioid deaths per capita against GDP per capita for each of the types of opioids and total opioids and colored the data points according to their political affiliation. We also added trend lines for both political affiliations. These graphs, displayed in Figures 8-11, illustrate both the relationships discussed earlier, and we can try to determine if there is a strong relationship between the two independent variables. While the trend lines show slight differences in death rates for Democratic and Republican counties, there is no significant separation between the lines in any of the graphs. However, we do see which counties are the outliers at different GDP per capita levels. For heroin, other, and total opioid death rates, we see more outliers from Republican counties than Democratic. It appears that Democratic counties tended to stay closer to the trend line than Republican counties. For methadone death rates, this relationship is flipped; Republican counties stayed closer to the trend line, while we see more Democrat outliers. We will continue to discuss outliers later on. We also created a plot that demonstrated the relationship between opioid death rates, population, and political affiliation for counties (Figure 13). We logged the population by 10 to scale and saw that as the total population per county increased, total opioid deaths per capita decreased. Moreover, Republican counties had higher opioid death rates at low populations, while Democrat counties had higher opioid death rates at high populations.
+
+```{r, echo=FALSE, warning=FALSE}
+ggplot(opioid_voter_data, aes(x=Population, y=DeathsPer100k, color=Winner)) +
+
+  geom_point() +
+
+  scale_x_log10() +
+
+  xlab("Total Population of County (logged by 10 to scale)") + ylab("Total Deaths from Opioids") + ggtitle("Figure 12: Total Deaths from Opioids, Color Coded by County Voting") +
+
+  geom_smooth(formula=NULL, method="lm", se=T, na.rm=T) + scale_color_manual(values = c("Democrat" = "blue", "Republican" = "red"))
+```
+Based on our data analysis, as displayed above, we were able to draw conclusions and observe how opioid deaths per capita interacted with political affiliation and GDP levels within American counties.  Through our data analysis, we found that at lower GDP per capita levels, there were a greater number of total opioid deaths than at higher GDP per capita levels, with a correlation of -0.269. The p-value for that data was 1.93*10^(-10), which is very significant.  We also found that in more populated Democratic counties and less populated Republican counties, there were higher amounts of opioid deaths per capita, with a correlation of 0.071 and a p-value of 0.0001875, which is also very significant for our data.  After assessing this data, we concluded that GDP per capita is ultimately a better indicator of opioid deaths per capita in a county than that county’s political affiliation.  The statistics in our data, such as the correlation and p-value, pointed to that conclusion, and our figures provide evidence for this conclusion. For example, as seen above in Figures 8-11, in which we overlaid the political data of a county on top of the GDP quartile data, it is clear that the political affiliation of a county does not have a large effect on opioid deaths per capita and instead follows the trends of the GDP quartile data. Following this analysis, we identified a few outliers in our political data to see if there were any potential explanations as to why some counties in our dataset have extremely high or low opioid death rates than the data trends we identified would predict. One example of an outlier is low population Democratic counties with high opioid deaths per capita.
+```{r, echo=FALSE, warning=FALSE}
+# exhibit 7
+poli_dem_outliers_high <- opioid_voter_data2 %>%
+  mutate(Dem_Tot_Upper = 40.412495,
+         Dem_Tot_Lower = 10.268903,
+         Rep_Tot_Upper = 38.77133,
+         Rep_Tot_Lower = 7.455316) %>%
+  filter(Winner == "Democrat") %>% 
+  filter(DeathsPer100k > Dem_Tot_Upper)
+
+opioid_voter_data_outliers = opioid_voter_data %>%
+  filter((County == "Rio Arriba" & State == "New Mexico") & Winner == "Democrat" | 
+           (County == "Wayne" & State == "West Virginia") & Winner == "Democrat" | 
+           (County == "Washington" & State == "Maine") & Winner == "Democrat") %>%
+  select(State, County, TotalDeaths, Population, DeathsPer100k, Winner) %>%
+  unique(by = "County") %>% mutate(Dem_Tot_Upper = 40.412495, GDP_PerCap_Quantile = c(1,1,2))
+
+opioid_voter_data = opioid_voter_data %>%
+  mutate(isDemOutlier = ifelse((County == "Rio Arriba" & State == "New Mexico") & Winner == "Democrat" | (County == "Wayne" & State == "West Virginia") & Winner == "Democrat" | (County == "Washington" & State == "Maine") & Winner == "Democrat", 1, 0))
+
+ggplot(opioid_voter_data, aes(x=Population, y=DeathsPer100k, color=Winner)) +
+  geom_point() + 
+  scale_x_log10() +
+  xlab("Total Population of County (logged by 10 to scale)") + ylab("Total Deaths from Opioids") + ggtitle("Figure 13: Total Opioid Deaths, Color Coded by County Voting w/ Dem Outliers") +
+  geom_smooth(formula=NULL, method="lm", se=T, na.rm=T) + scale_color_manual(values = c("Democrat" = "blue", "Republican" = "red")) +
+  geom_text(aes(label=ifelse(isDemOutlier, as.character(County), '')), hjust=-.2, vjust=.1)
+
+```
+As seen in Figure 14, these counties are well above the Democratic trend line predicted for Democratic counties with a low population. One county we looked at as an outlier was Wayne County, West Virginia. This county had 61.68 deaths per 100,000 people in 2016, with a population of just 40,531.  While there was not much available in terms of statistics on crime data, multiple articles named this county’s most populous city, Huntington, WV, one of the “10 Most Ghetto Cities in West Virginia,” and Wayne County also had a GDP quartile of 1 upon further investigation. These factors could play a role in understanding why Wayne County had such a high amount of opioid deaths per capita, inconsistent with the prediction of low population Democratic counties having low death numbers. Focusing on this area as a high-risk county for opioid abuse could help to prevent opioid deaths and lower the opioid deaths per capita in Wayne County.  Additionally, outliers like Wayne County inform future research, as crime data should be incorporated in future models. Another set of outliers that we examined was high population Republican counties with low opioid deaths per capita.
+
+```{r, echo=FALSE, warning=FALSE}
+# exhibit 8
+poli_rep_outliers_low <- opioid_voter_data2 %>%
+  mutate(Dem_Tot_Upper = 40.412495,
+         Dem_Tot_Lower = 10.268903,
+         Rep_Tot_Upper = 38.77133,
+         Rep_Tot_Lower = 7.455316) %>%
+  filter(Winner == "Republican") %>% 
+  filter(DeathsPer100k < Rep_Tot_Lower) %>%
+  select(State, County, TotalDeaths, Population=Population.x, DeathsPer100k, Winner,GDP_PerCap_Quantile, Rep_Tot_Upper) %>%
+  unique(by="County")
+
+opioid_voter_data = opioid_voter_data %>%
+  mutate(isRepLowOutlier = ifelse((County == "Polk" & State == "Florida") & Winner == "Republican" | (County == "Placer" & State == "California") & Winner == "Republican" | (County == "Lake" & State == "Florida") & Winner == "Republican", 3, 0))
+
+ggplot(opioid_voter_data, aes(x=Population, y=DeathsPer100k, color=Winner)) +
+  geom_point() +
+  scale_x_log10() + 
+  xlab("Total Population of County (logged by 10 to scale)") + ylab("Total Deaths from Opioids") + ggtitle("Figure 14: Total Opioid Deaths, Color Coded by County Voting w/ Rep Outliers") +
+  geom_smooth(formula=NULL, method="lm", se=T, na.rm=T) + scale_color_manual(values = c("Democrat" = "blue", "Republican" = "red")) +
+  geom_text(aes(label=ifelse(isRepLowOutlier, as.character(County), '')), hjust=.5, vjust=2)
+```
+These counties are well below the Republican trend line and have some of the lowest opioid death rates per capita in our entire dataset.  One outlier that stood out to us was Placer County, California.  This county had 2.89 deaths per 100,000 people in 2016 and a population of 380,531. Placer County is located in the greater Sacramento area and is 84.7% white, 12.6% Hispanic.  In this county, the median household income is $74,645, its GDP quartile was 3, and there is very little crime in the county. These factors may explain why this Republican county has such a low opioid death per capita number despite our models predicting otherwise. Overall, these outliers were interesting to examine because each county is different, so there is not one overarching reason for opioid death outliers in counties. However, as our data showed, GDP per capita was a better indicator of a county’s opioid deaths per capita.
+
+
+The data we presented through these analyses is necessary because it allows us to help better predict where opioid deaths could come from and how opioid deaths can be preventable in certain areas based on that area’s demographics.  When we can link different demographic values to trends in opioid deaths, we can best figure out where deaths can be prevented throughout America and begin fighting the opioid epidemic that has been rocking the United States for years with evidence-based interventions.  The results we found in our analyses also answer the goal of our analysis. The results compare two factors, political affiliation and GDP per capita, and look at how they can be related and how they can be used to predict opioid deaths in American counties.  The goal of our analysis was to determine if GDP levels and political affiliations in counties have any relationship with opioid deaths, and we think the results that we collected answers that question well.
+
+
+# Conclusion
+
+Our first question involved finding the best variables for creating a predictive model to predict opioid related deaths per capita.  From creating a predictive model, we were able to conclude that the factors of a county that were significant in predicting deaths per capita were the usage of public transportation in a county for commuting to work, levels of education in a county,  the income levels of a county, the proportion of individuals who were non-US born, GDP, and the GDP from education, health, and social assistance (EHSA GDP). In our second question, we wanted to see whether GDP or political affiliation had an effect on the death per capita in a county. We concluded that between these two factors, GDP did have an effect on the deaths per capita in a county and that political affiliation did not.
+
+The conclusion that we obtained from answering our first question was mostly expected. We were able to observe that multiple variables were significant in affecting the total deaths per capita in a county. However, what’s notable was that an increase in EHSA GDP led to an increase in predicted deaths per capita from opioids. As for our second question, the conclusion was unexpected, as we saw that political affiliation did not appear to have much of an effect on the observed deaths per capita from opioids. The results that we obtained from answering these two questions are important as they can provide insights into how to reduce opioid related deaths in a county by using a predictive model and previously observed data.
+
+As mentioned earlier in our analyses, there are a few variables of interest that we did not have access to that could have improved our model. First, merging crime data into our dataset may explain some of the outliers - like Wayne County - observed in this dataset that did not fit the predicted trend. Additionally, further information on the proportion of county residents born outside of the US - with a focus on undocumented immigrants - would be helpful given that undocumented immigrants do not have the same access to social services, education, and healthcare as legal immigrants, permanent residents, and U.S. citizens would. Beyond the addition of variables not initially included in this dataset, we could also widen the timeframe analyzed in this project. Although we only looked at 2016 data given the large size of this dataset and the limited timeline for this project, our modeling could be extended to incorporate data from all the years included in this data (2011-2017). Extending the timeframe would help us see if our model drastically changes from year to year with differences in governmental interventions (ex: increasing access to Narcan over the years, a drug that can reverse an opioid overdose and thus prevent opioid deaths) or other circumstances that may impact significant variables in our model. Additionally, future research should include the years following 2017, with a specific focus on opioid deaths during the pandemic, to see if isolation, COVID-19 related deaths, and an economic recession impact opioid deaths independently of the variables in our dataset.
+
+Both of the questions and our conclusions from their analyses would be helpful to a wide range of individuals. First, policymakers looking to understand the opioid epidemic and develop cost-effective interventions would benefit from looking at our model. It indicates that improving education outcomes and attracting non-US-born residents have the most significant impact on reducing opioid deaths. Secondly, the average individual would benefit from understanding our analysis due to the commonly held public perception that opioid deaths are a disease of the rural, poor, and Republican communities in the United States. Our second question indicates that GDP, rather than political affiliation, is a better predictor of opioid deaths and that economically poor counties, regardless of political affiliation, are impacted by this epidemic. Individuals can take it upon themselves to reduce opioid deaths in their community by volunteering, donating money towards education and other social services, or carrying Narcan with them if they encounter someone experiencing an overdose. Overall, the opioid epidemic impacts every American, regardless of their race, gender, political views, or any other identity - and it is the responsibility of each and everyone one of us, regardless if you are an elected official or an average citizen - to bring an end to this.
