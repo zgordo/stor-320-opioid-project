@@ -1,0 +1,78 @@
+---
+title: "opioid_map"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# import libraries
+library(tidyverse)
+library(leaflet)
+library(maps)
+library(mapdata)
+library(sf)
+library(raster)
+library(tmap)
+
+```
+
+```{r}
+opioid_data_wide = read_csv(file="Wide_Master.csv")
+counties = read_sf(dsn ="C:\\Users\\zgord\\OneDrive - University of North Carolina at Chapel Hill\\Semesters\\Spring 2021\\STOR 320\\Project\\data\\cb_2018_us_county_5m\\cb_2018_us_county_5m.shp")
+fips = read.csv("us-state-ansi-fips.csv")
+```
+
+
+```{r}
+# clean data. Done as a group
+
+
+opioid_data_wide1 <- opioid_data_wide %>%
+  filter(Year == '2016') %>%
+  filter(!is.na(Total))
+
+opioid_data_wide1 <- opioid_data_wide1 %>%
+  mutate(HS_Or_Less = (HS_Grad + Less_Than_HS)/(HS_Grad + Less_Than_HS + Bachelor_Degree + Grad_Degree + Associates_Degree)) %>%
+  mutate(HS_Or_Less_Quantile = ntile(HS_Or_Less, 4)) %>%
+  mutate(Some_College = (Bachelor_Degree + Grad_Degree + Associates_Degree)/(HS_Grad + Less_Than_HS + Bachelor_Degree + Grad_Degree + Associates_Degree)) %>%
+  mutate(Some_College_Quantile = ntile(Some_College, 4)) %>%
+  mutate(Proportion_Non_US = Non_US_Born/Population) %>% 
+  mutate(Non_US_Quantile = ntile(Proportion_Non_US, 20)) %>%
+  mutate(PopDensity = Population/LandArea, Deaths_Per_100000 = (Total/Population) * 100000) %>%
+  mutate(GDP_Per_Capita = `GDP Total`/Population) %>%
+  mutate(GDP_EHSA_Per_Capita = as.numeric(`GDP Education, Health, Social Assistance`)/Population) %>%
+  mutate(GDP_PerCap_Quantile = ntile(GDP_Per_Capita, 4)) %>%
+  mutate(GDP_EHSA_PerCap_Quantile = ntile(GDP_EHSA_Per_Capita, 4)) %>%
+  mutate(Social_Transportation = Bike + Walk + Carpool + Public) %>%
+  mutate(AntiSocial_Transportation = Alone + Home)
+opioid_data_wide1
+
+
+```
+
+
+```{r}
+counties = counties %>%
+  mutate(STATEFP = as.numeric(STATEFP))
+
+counties.sf.data = opioid_data_wide1 %>% 
+  filter(Year == 2016) %>% 
+  left_join(fips, by = c("State" = "stname")) %>% 
+  right_join(counties, by = c("st" = "STATEFP", "County" = "NAME")) %>% 
+  mutate(county_name = paste(County,", ", State, sep ="")) %>%
+  st_as_sf()
+
+tmap_mode("view")
+tm_shape(counties.sf.data) +
+  tm_polygons("Deaths_Per_100000",
+              id = "county_name",
+              title = "Opioid eaths per capita in 2016",
+              popup.vars = c("Deaths Per 100,000: " = "Deaths_Per_100000",
+                             "Population of county: " = "Population"),
+              )
+
+```
+

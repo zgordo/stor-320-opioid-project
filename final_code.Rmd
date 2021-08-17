@@ -1,0 +1,166 @@
+---
+title: "Untitled"
+output:
+  pdf_document: default
+  html_document: default
+  fig_caption: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F)
+library(knitr)
+
+```
+
+
+```{r, include=F}
+library(tidyverse)
+### Cleaning the data so it runs
+opioid_data_long = read_csv(file="Master_Table_Long.csv")
+opioid_data_wide = read_csv(file="Wide_Master.csv")
+
+opioid_data_long1 <- opioid_data_long %>%
+  count(Year) %>%
+  arrange(desc(n))
+
+opioid_data_wide1 <- opioid_data_wide %>%
+  filter(Year == '2016') %>%
+  filter(!is.na(Total))
+
+opioid_data_wide1 <- opioid_data_wide1 %>%
+  mutate(HS_Or_Less = (HS_Grad + Less_Than_HS)/(HS_Grad + Less_Than_HS + Bachelor_Degree + Grad_Degree + Associates_Degree)) %>%
+  mutate(HS_Or_Less_Quantile = ntile(HS_Or_Less, 4)) %>%
+  mutate(Some_College = (Bachelor_Degree + Grad_Degree + Associates_Degree)/(HS_Grad + Less_Than_HS + Bachelor_Degree + Grad_Degree + Associates_Degree)) %>%
+  mutate(Some_College_Quantile = ntile(Some_College, 4)) %>%
+  mutate(Proportion_Non_US = Non_US_Born/Population) %>%
+  mutate(Non_US_Quantile = ntile(Proportion_Non_US, 5)) %>%
+  mutate(PopDensity = Population/LandArea, Deaths_Per_100000 = (Total/Population) * 100000) %>%
+  mutate(GDP_Per_Capita = `GDP Total`/Population) %>%
+  mutate(GDP_EHSA_Per_Capita = as.numeric(`GDP Education, Health, Social Assistance`)/Population) %>%
+  mutate(GDP_PerCap_Quantile = ntile(GDP_Per_Capita, 4)) %>%
+  mutate(GDP_EHSA_PerCap_Quantile = ntile(GDP_EHSA_Per_Capita, 4)) %>%
+  mutate(Social_Transportation = (Bike + Walk + Carpool + Public)/100) %>%
+  mutate(AntiSocial_Transportation = Alone + Home)
+opioid_data_wide1
+
+opioid_data_wide2 = opioid_data_wide1 %>%
+  filter(!is.na(Unemployment)) %>%
+  filter(!is.na(Social_Transportation)) %>%
+  filter(!is.na(HS_Or_Less)) %>%
+  filter(!is.na(Income)) %>%
+  filter(!is.na(Proportion_Non_US)) %>%
+  filter(!is.na(GDP_Per_Capita)) %>%
+  filter(!is.na(GDP_EHSA_Per_Capita)) %>%
+  filter(!is.na(Population)) %>%
+  filter(!is.na(PopDensity))
+
+kable(opioid_data_wide2 %>% head(), caption ="blah", align = "l")
+```
+
+
+![Screenshot of Leaflet map of opioid deaths per capita in 2016](map.png)
+
+
+
+```{r, echo = F, fig.show="hold", out.width="50%"}
+# fig 1
+opioid_data_wide2 %>% 
+  ggplot(aes(x = Deaths_Per_100000)) +
+  geom_density() +
+  labs(title = "Density plot of deaths per 100,000") +
+  xlab("Deaths per 100,000")
+
+# fig 2
+qqnorm(opioid_data_wide2$Deaths_Per_100000, main = "Normal Q-Q Plot of Deaths")
+```
+
+```{r, echo = F, fig.show="hold", out.width="50%"}
+
+# fig 3
+opioid_data_wide2 %>% 
+  ggplot(aes(x = log(Deaths_Per_100000))) +
+  geom_density() +
+  labs(title = "Density plot of log transformed deaths per 100,000") +
+  xlab("Log transformed deaths per 100,000")
+
+#fig 4
+qqnorm(log(opioid_data_wide2$Deaths_Per_100000), main = "Normal Q-Q Plot of Log Transformed Deaths")
+```
+
+
+```{r, echo = F}
+
+# code that finds the best model
+Full_log=lm(log(Deaths_Per_100000)~Unemployment+Social_Transportation+HS_Or_Less+Income+Proportion_Non_US + GDP_Per_Capita + GDP_EHSA_Per_Capita + Population + PopDensity, data = opioid_data_wide2)
+full = Full_log %>% summary()
+
+  partial1 =lm(log(Deaths_Per_100000)~Unemployment+Social_Transportation+HS_Or_Less+Income+Proportion_Non_US + GDP_Per_Capita + GDP_EHSA_Per_Capita + Population, data = opioid_data_wide2)
+
+p1 = summary(partial1)
+
+partial2 =lm(log(Deaths_Per_100000)~Unemployment+Social_Transportation+HS_Or_Less+Income+Proportion_Non_US + GDP_Per_Capita + GDP_EHSA_Per_Capita, data = opioid_data_wide2)
+
+p2 = summary(partial2)
+
+partial3 =lm(log(Deaths_Per_100000)~Social_Transportation+HS_Or_Less+Income+Proportion_Non_US + GDP_Per_Capita + GDP_EHSA_Per_Capita, data = opioid_data_wide2)
+
+ p3 = summary(partial3)
+
+partial4 =lm(log(Deaths_Per_100000)~Social_Transportation+HS_Or_Less+Income+Proportion_Non_US  + GDP_EHSA_Per_Capita, data = opioid_data_wide2)
+
+p4 = summary(partial4)
+
+# this figure will show the selection process
+results = tibble(
+  Model = c("full", "Partial model 1","Partial model 2","Partial model 3"),
+  `Adjusted R Squared` = c(full$adj.r.squared,p1$adj.r.squared,p2$adj.r.squared,p3$adj.r.squared),
+  `Variable with Highest P Value` = c("PopDensity", "Population","Unemployment","GDP"),
+  `Highest P Value in the Model` = c(.956, .9151, .3154, .01349)
+)
+
+# fig 5
+kable(results, caption = "Backwords Elimination Process", label = NULL)
+```
+
+
+
+```{r}
+log_mod = lm(formula = log(Deaths_Per_100000) ~ Social_Transportation + 
+    HS_Or_Less + Income + Proportion_Non_US + GDP_Per_Capita + 
+    GDP_EHSA_Per_Capita, data = opioid_data_wide2)
+
+# fig 6
+log_mod %>% 
+  ggplot() +
+  geom_point(aes(x = .fitted, y = .resid)) +
+  labs(title ="Fitted VS Residual Plot")
+```
+
+
+
+FIG 7 this should go in the exact spot I mention it in the paper DELETE THIS LINE SO ITS NOT IN THE FINAL THING
+
+## $log(Y) = .8872 + 2.023x_1 + 2.411x_2 + .8.969 * 10^{-6}x_3 - 5.171x_4 - 3.741 * 10^{-3}x_5 + 3.617 * 10^{-2}x_6$ 
+
+
+where
+
+
+$Y =$ The number of opioid deaths per 100,000 in a given county
+
+$x_1 =$ Proportion of county that uses social transportation 
+
+$x_2 =$ Proportion highest educational attainment is high school or less 
+
+$x_3 =$ Income
+
+$x_4 =$ Proportion of citizens in a county no born in the U.S.
+
+$x_5 =$ GDP per capita
+
+$x_6 =$ EHSA GDP per capita
+
+
+
+
+

@@ -14,8 +14,7 @@ require(knitr)
 ```
 
 ```{r, include=FALSE}
-opioid_data_long = read_csv(file="C:/Users/mattb523/Documents/SCHOOL WORK/STOR320/FINAL PROJECT/Master_Table_Long.csv")
-opioid_data_wide = read_csv(file="C:/Users/mattb523/Documents/SCHOOL WORK/STOR320/FINAL PROJECT/Wide_Master.csv")
+opioid_data_wide = read_csv(file="C:/Users/zgord/OneDrive - University of North Carolina at Chapel Hill/Semesters/Spring 2021/STOR 320/Project/data/Wide_Master.csv")
 
 opioid_data_wide1 <- opioid_data_wide %>%
   filter(Year == '2016') %>%
@@ -81,11 +80,11 @@ drug_averages <- opioid_data_wide3 %>%
             "Other_Per100k_25%"=quantile(Other_Per_100k,.25),
             "Other_Per100k_75%"=quantile(Other_Per_100k,.75))
 
-county_voter_data = read_csv(file="C:/Users/mattb523/Documents/SCHOOL WORK/STOR320/FINAL PROJECT/countypres_2000-2016.csv")
+county_voter_data = read_csv(file="C:/Users/zgord/OneDrive - University of North Carolina at Chapel Hill/Semesters/Spring 2021/STOR 320/Project/data/countypres_2000-2020.csv")
 
 county_voter_data <- county_voter_data %>%
   filter(year=="2016", office=="President") %>%
-  select(year, state, county, party, candidatevotes, totalvotes) %>%
+  select(year, state, county_name, party, candidatevotes, totalvotes) %>%
   filter(party!="NA") %>%
   pivot_wider(names_from = party, values_from = candidatevotes)
 
