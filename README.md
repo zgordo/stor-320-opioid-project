@@ -4,7 +4,7 @@
 
 <h2>Summary<h2>
 <p>This was a the my final Project for STOR 320 at UNC Chapel Hill. My group explored opioid deaths by county in 2016.
-   We looked at a number of different factors including population, education, income, GDP, political leaning, and many others. We got the data from <a src="https://www.kaggle.com/ryanandreweckberg/opioid-crisis-by-interpersonal-relationships">Kaggle<a>.
+   We looked at a number of different factors including population, education, income, GDP, political leaning, and many others. We got the data from https://www.kaggle.com/ryanandreweckberg/opioid-crisis-by-interpersonal-relationships.
    As a group we performed basic statistical modeling and visualized using R Markdown and Tidyverse. We also used some 2016 election data from MIT. Unfortunately this data no longer exists in its current form, and I don't have the downloaded data on my computer. This means I cannot knit the final markdown to display the final product. However I have included the HTML and RMD files for my contribution. The code for the entire project can be found in Final_Report_Group_11.<p>
 
 <h2>My Role<h2>
